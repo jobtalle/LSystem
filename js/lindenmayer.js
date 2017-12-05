@@ -1,8 +1,8 @@
 function RuleHead(string) {
 	var index = 0;
-	var conditionIndex = string.indexOf(":");
-	var predecessorIndex = string.indexOf("<");
-	var successorIndex = string.indexOf(">");
+	var conditionIndex = string.indexOf(this.SYMBOL_CONDITION);
+	var predecessorIndex = string.indexOf(this.SYMBOL_CONTEXT_LEFT);
+	var successorIndex = string.indexOf(this.SYMBOL_CONTEXT_RIGHT);
 	
 	if(conditionIndex != -1) {
 		if(predecessorIndex > conditionIndex)
@@ -33,6 +33,12 @@ function RuleHead(string) {
 		this.condition = null;
 }
 
+RuleHead.prototype = {
+	SYMBOL_CONTEXT_LEFT: "<",
+	SYMBOL_CONTEXT_RIGHT: ">",
+	SYMBOL_CONDITION: ":"
+}
+
 function RuleBody(string) {
 	this.body = Lindenmayer.prototype.toSymbols(string);
 }
@@ -40,8 +46,8 @@ function RuleBody(string) {
 function Rule(string) {
 	var source = string.replace(/\s/g, "");
 	
-	this.head = new RuleHead(source.substring(0, source.lastIndexOf("=")));
-	this.body = new RuleBody(source.substring(source.lastIndexOf("=") + 1));
+	this.head = new RuleHead(source.substring(0, source.lastIndexOf(this.SYMBOL_EQUALS)));
+	this.body = new RuleBody(source.substring(source.lastIndexOf(this.SYMBOL_EQUALS) + 1));
 	this.keys = this.getKeys();
 	this.fCondition = new Function(this.keys, "return " + this.head.condition);
 	
@@ -49,6 +55,8 @@ function Rule(string) {
 }
 
 Rule.prototype = {
+	SYMBOL_EQUALS: "=",
+	
 	addFunctionsToBody() {
 		for(var symbol = 0; symbol < this.body.body.length; ++symbol)
 			this.body.body[symbol].createFunctions(this.keys);
@@ -122,8 +130,14 @@ Symbol.prototype = {
 		this.symbol = string[index];
 		
 		if(index + 1 < string.length && string[index + 1] == "(") {
+			var scope = 1;
 			var start = ++index + 1;
-			while(string[++index] != ")");
+			
+			while(string[++index])
+				if(string[index] == "(")
+					++scope;
+				else if(string[index] == ")" && --scope == 0)
+					break;
 			
 			this.parameters = string.substr(start, index - start).split(",");
 		}
@@ -198,8 +212,6 @@ function Lindenmayer() {
 }
 
 Lindenmayer.prototype = {
-	MAX_LENGTH: 16000,
-	
 	setConstants(constants) {
 		this.constants = constants;
 	},
@@ -219,6 +231,7 @@ Lindenmayer.prototype = {
 	
 	process(axiom, iterations) {
 		var axiom = this.toSymbols(axiom.replace(/\s/g, ""));
+		var iteration = 0;
 		
 		for(var iteration = 0; iteration < iterations; ++iteration)
 			axiom = this.applyRules(axiom);
@@ -258,7 +271,7 @@ Lindenmayer.prototype = {
 			
 			if(s.parameters.length > 0)
 				for(var parameter = 0; parameter < s.parameters.length; ++parameter)
-					result.parameters.push(s.functions[parameter](Object.values(rule.key)));
+					result.parameters.push(s.functions[parameter].apply(this, Object.values(rule.key)));
 				
 			returnSymbols.push(result);
 		}
@@ -271,13 +284,8 @@ Lindenmayer.prototype = {
 		
 		if(rules.length == 0)
 			return [symbol];
-		else if(rules.length == 1)
-			return this.applyRule(rules[0], symbol, predecessor, successor);
-		else {
-			var ruleIndex = Math.floor(Math.random() * rules.length);
-			
-			return this.applyRule(rules[ruleIndex], symbol, predecessor, successor);
-		}
+		
+		return this.applyRule(rules[Math.floor(Math.random() * rules.length)], symbol, predecessor, successor);
 	},
 	
 	applyRules(sentence) {
@@ -294,9 +302,6 @@ Lindenmayer.prototype = {
 				successor = sentence[symbol + 1];
 			
 			newSentence = newSentence.concat(this.parseSymbol(predecessor, sentence[symbol], successor));
-			
-			if(newSentence.length > this.MAX_LENGTH)
-				return newSentence;
 		}
 		
 		return newSentence;
